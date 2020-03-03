@@ -108,5 +108,5 @@
 	</build>  
     <description>this is just a example plugin to test and demonstrate the compiliation of IJ plugins</description> <!-- Change -->
     <name>example plugin</name>		<!-- Change -->
-    <artifactId>example_Plugin</artifactId>		<!-- Change, NEEDS TO CONTAIN An UNDERSCORE ("_") -->
+    <artifactId>example_plugin</artifactId>		<!-- Change, NEEDS TO CONTAIN An UNDERSCORE ("_") -->
 </project>

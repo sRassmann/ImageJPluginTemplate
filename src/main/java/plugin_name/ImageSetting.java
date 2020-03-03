@@ -1,4 +1,4 @@
-package plugin_Name;
+package plugin_name;
 
 import java.awt.Font;
 
@@ -31,8 +31,9 @@ public class ImageSetting {
 	/**
 	 * Constructs new Object and triggers a GD for the user
 	 * @return User-chosen ImageSettings
+	 * @throws Exception 
 	 */
-	public static ImageSetting initByGD(String pluginName, String pluginVersion) {
+	public static ImageSetting initByGD(String pluginName, String pluginVersion) throws Exception {
 		
 		ImageSetting inst = new ImageSetting();			//returned instance of ImageSettingClass
 		
@@ -60,12 +61,12 @@ public class ImageSetting {
 		inst.factor2 = gd.getNextNumber();
 		inst.choice = gd.getNextBoolean();	
 		
-		inst.valid = !gd.wasCanceled();
+		if(gd.wasCanceled()) throw new Exception();
 		
 		return inst;		
 	}
 	
-	// Insert choices as needed
+	// TODO Insert choices as needed
 	public String toString() {
 		return ("");
 	}

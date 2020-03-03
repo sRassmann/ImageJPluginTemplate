@@ -1,11 +1,9 @@
-package plugin_Name;
+package plugin_name;
 
 import java.awt.event.WindowEvent;
-import java.io.IOException;
 
 import ij.IJ;
-import ij.ImagePlus;
-import ij.WindowManager;
+import ij.gui.WaitForUserDialog;
 import ij.plugin.PlugIn;
 
 public class Main implements PlugIn {
@@ -24,18 +22,13 @@ public class Main implements PlugIn {
 	 * images - normally does not require changes
 	 */
 	public void run(String arg) {
-		IJ.log("Plugin Started");
 		pS = null;
 		ImageSetting iS = null;
 		try {
-			IJ.log("Plugin GD");
 			pS = ProcessSettings.initByGD(pluginName, pluginVersion);
-			IJ.log("Image Settings GD");
-			if (!pS.valid)
-				return;
 			iS = ImageSetting.initByGD(pluginName, pluginVersion);
-		} catch (IOException e) {
-			e.printStackTrace();
+		} catch (Exception e) {
+			new WaitForUserDialog("GD canceled - end Plugin!").show();
 			return;
 		}
 		if (pS.resultsToNewFolder) {
@@ -43,33 +36,12 @@ public class Main implements PlugIn {
 		}
 		startProgressDialog(pS.toArray(), pS.getNOfTasks());
 
-		IJ.log("Initialized settings");
-
 		for (int task = 0; task < pS.getNOfTasks(); task++) {
 			progressDialog.updateBarText("in progress...");
-			IJ.log("processing task " + task);
-			Processing.doProcessing(pS.paths.get(task), pS.names.get(task), pS.getOutputDir(task), iS, progressDialog);
-			progressDialog.updateBarText("finished!");
+			Processing.doProcessing(pS.paths.get(task), pS.names.get(task), pS.getOutputDir(task), pS, iS, progressDialog);
 			progressDialog.moveTask(task);
 		}
-		IJ.log("Pugin done!");
-	}
-
-	/**
-	 * Wraps functionality of opening Images in IJ depending on the chosen file format
-	 * @param path path to file to be opened
-	 * @return reference of opened ImagePlus
-	 */
-	protected static ImagePlus openImage(String path) {
-		ImagePlus imp;
-		if (pS.selectedBioFormat.equals(ProcessSettings.bioFormats[0])) {
-			imp = IJ.openImage(path);
-		} else {
-			IJ.run("Bio-Formats", "open=[" + path
-					+ "] autoscale color_mode=Default rois_import=[ROI manager] view=Hyperstack stack_order=XYCZT");
-			imp = WindowManager.getCurrentImage();
-		}
-		return imp;
+		progressDialog.updateBarText("finished!");
 	}
 
 	private void startProgressDialog(String[] tasks, int nOfTasks) {

@@ -1,10 +1,10 @@
-package plugin_Name;
+package plugin_name;
 
 import ij.IJ;
 import ij.ImagePlus;
 
 public class Processing {
-	
+
 	/**
 	 * Wraps the logic and real processing of the generated plugin.
 	 * 
@@ -16,8 +16,9 @@ public class Processing {
 	 * @return
 	 */
 
-	static boolean doProcessing(String path, String name, String outputDir, ImageSetting iS, ProgressDialog pD) {
-		ImagePlus imp = Main.openImage(path + System.getProperty("file.separator") + name); // use to handle bioFormats without the need of user interaction
+	static boolean doProcessing(String path, String name, String outputDir, ProcessSettings pS, ImageSetting iS,
+			ProgressDialog pD) {
+		ImagePlus imp = pS.openImage(path + System.getProperty("file.separator") + name);
 		pD.updateBarText("opened image"); // update progress during task as necessary
 		IJ.save(imp, outputDir + System.getProperty("file.separator") + name + "_c.tif");
 		return false;

@@ -1,4 +1,4 @@
-package plugin_Name;
+package plugin_name;
 
 import java.awt.Component;
 import java.awt.Dimension;
@@ -6,10 +6,13 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowEvent;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.Stack;
 
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
@@ -24,6 +27,8 @@ import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
 import javax.swing.UIManager;
 
+import ij.IJ;
+import ij.ImagePlus;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
 import ij.gui.WaitForUserDialog;
@@ -40,20 +45,16 @@ import ij.io.FileInfo;
  */
 public class ProcessSettings {
 
-	// -------------------- Raw Process Settings
-
-	boolean valid = false; // input is valid
-
 	// add necessary Settings and defaults here
 
 	static final String[] taskVariant = { "active image in FIJI", "all images open in FIJI", "manual file selection",
-			"list (txt)", "pattern matching" };
-	String selectedTaskVariant = taskVariant[2];
+			"use list (txt)", "pattern matching" };
+	String selectedTaskVariant = taskVariant[4];
 
 	static final String[] bioFormats = { ".tif", "raw microscopy file (e.g. OIB-file)" };
-	String selectedBioFormat = bioFormats[1];
+	String selectedBioFormat = bioFormats[0];
 
-	String pattern = "";
+	String pattern = ".*_C1_pBIN\\.tif"; // example regex choosing a file ending with "_C1_pBIN.tif"
 
 //	boolean saveDateToFilenames = false;
 //	boolean saveParam = true;
@@ -65,10 +66,10 @@ public class ProcessSettings {
 
 	// --------------------- Task data
 
-	ArrayList<String> names = new ArrayList<String>();
-	ArrayList<String> paths = new ArrayList<String>();
+	ArrayList<String> names = new ArrayList<String>();		// files names with ending (e.g. .tif)
+	ArrayList<String> paths = new ArrayList<String>();		// paths to parent dir with last file sep ("/")
 
-	private ProcessSettings() throws IOException {
+	private ProcessSettings() {
 		super();
 	}
 
@@ -88,9 +89,9 @@ public class ProcessSettings {
 	 * Constructs new Object and triggers a GD for the user
 	 * 
 	 * @return User-chosen Processing Settings
-	 * @throws IOException
+	 * @throws Exception
 	 */
-	public static ProcessSettings initByGD(String pluginName, String pluginVersion) throws IOException {
+	public static ProcessSettings initByGD(String pluginName, String pluginVersion) throws Exception {
 
 		ProcessSettings inst = new ProcessSettings(); // returned instance of ImageSettingClass
 
@@ -104,11 +105,12 @@ public class ProcessSettings {
 
 		// Change as necessary
 		gd.setInsets(0, 0, 0);
-		gd.addChoice("Example Choice ", taskVariant, inst.selectedTaskVariant);
+		gd.addChoice("File selection method ", taskVariant, inst.selectedTaskVariant);
 		gd.setInsets(0, 0, 0);
 		gd.addChoice("Input File format ", bioFormats, inst.selectedBioFormat);
 		gd.setInsets(0, 0, 0);
 		gd.addStringField("Enter pattern for pattern Matching", inst.pattern, 16);
+		gd.addCheckbox("Output to new Folder", inst.resultsToNewFolder);
 
 		// show Dialog-----------------------------------------------------------------
 		gd.showDialog();
@@ -118,8 +120,9 @@ public class ProcessSettings {
 		inst.selectedTaskVariant = gd.getNextChoice();
 		inst.selectedBioFormat = gd.getNextChoice();
 		inst.pattern = gd.getNextString();
+		inst.resultsToNewFolder = gd.getNextBoolean();
 
-		inst.valid = !gd.wasCanceled();
+		if(gd.wasCanceled()) throw new Exception("GD canceled by user");
 
 		inst.fileFinder();
 
@@ -147,7 +150,7 @@ public class ProcessSettings {
 				this.names.add(info.fileName); // get name
 				this.paths.add(info.directory); // get directory
 			}
-		} else if (this.selectedTaskVariant == taskVariant[1]) { // select files indiviually
+		} else if (this.selectedTaskVariant == taskVariant[1]) { // select files individually
 			if (WindowManager.getIDList() == null) {
 				new WaitForUserDialog("Plugin canceled - no image open in FIJI!").show();
 				throw new IOException();
@@ -166,17 +169,13 @@ public class ProcessSettings {
 				}
 			}
 		} else if (this.selectedTaskVariant == taskVariant[2]) {
-
 			OpenFilesDialog od = new OpenFilesDialog();
 			od.setLocation(0, 0);
 			od.setVisible(true);
 
-			od.addWindowListener(new java.awt.event.WindowAdapter() {
+			od.addWindowListener(new java.awt.event.WindowAdapter(){
 				public void windowClosing(WindowEvent winEvt) {
-					try {
-						throw new Exception();
-					} catch (Exception e) {
-					}
+					return;
 				}
 			});
 
@@ -192,28 +191,164 @@ public class ProcessSettings {
 				paths.add(f.getParent() + System.getProperty("file.separator"));
 			}
 		} else if (this.selectedTaskVariant == taskVariant[3]) {
-			String txtPath = System.getProperty("user.dir");
-			boolean validInput = false;
-			while (!validInput) {
-				txtPath = choosePathTxt("Choose txt containing paths of files to process", txtPath);
-				if (txtPath.contains(".txt"))
-					validInput = true;
-			}
-			// TODO read in paths fron list
+			readFilesFromTxt(System.getProperty("user.dir"));
 		} else if (this.selectedTaskVariant == taskVariant[4]) {
-			String dirToSearch = System.getProperty("user.dir");
-			dirToSearch = choosePathTxt("Choose Directory to start pattern matching", dirToSearch);
-			for (String s : matchPattern(dirToSearch, "pattern")) {
-				names.add(s.substring(s.lastIndexOf(System.getProperty("file.seperator")), s.length())); // todo check
-																											// the
-																											// indizes
-				paths.add(s.substring(0, s.lastIndexOf(System.getProperty("file.seperator"))));
+			matchPattern(System.getProperty("user.dir"), pattern);
+		}
+	}
+
+	/**
+	 * Inits the names and paths list with the files found in the specified txt-file
+	 * 
+	 * @param path path to start File Selector
+	 * @throws IOException
+	 * @throws IOException if txt file not found
+	 */
+	private void readFilesFromTxt(String path) throws IOException {
+//		String txtPath = System.getProperty("user.dir");
+		boolean validInput = false;
+		while (!validInput) { // wait for valid input
+			path = choosePathTxt("Choose txt containing paths of files to process", path);
+			if (path.contains(".txt"))
+				validInput = true;
+		}
+		File file = new File(path);
+		BufferedReader br = new BufferedReader(new FileReader(file));
+		String s = "";
+		while ((s = br.readLine()) != null) {
+			names.add(s.substring(s.lastIndexOf(System.getProperty("file.separator")) + 1));
+			paths.add(s.substring(0, s.lastIndexOf(System.getProperty("file.separator")) + 1));
+		}
+		br.close();
+	}
+
+	/**
+	 * choose path to dir
+	 * 
+	 * @param message
+	 * @param defaultpath
+	 * @return
+	 */
+	public static String choosePathTxt(String message, String defaultpath) {
+		JFileChooser fc = new JFileChooser();
+		fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		fc.setMultiSelectionEnabled(false);
+		fc.setCurrentDirectory(new File(defaultpath));
+		if (fc.showDialog(fc, message) == JFileChooser.APPROVE_OPTION) {
+//		   System.out.println(fc.getSelectedFile().getAbsoluteFile());
+		}
+		String selectedpath = fc.getSelectedFile().getPath();
+		return selectedpath;
+	}
+
+	/**
+	 * implements string pattern matching to search in all sub directories of
+	 * specified root directory for files to process.
+	 * 
+	 * See https://www.vogella.com/tutorials/JavaRegularExpressions/article.html for
+	 * regex notation in java
+	 * 
+	 * @param path    path to directory where the search starts
+	 * @param pattern regex to be matched in filenames
+	 * @return full paths of files matching requirements in the specified dir
+	 */
+	private void matchPattern (String rootPath, String pattern) {
+		rootPath = choosePath("Choose directory to start pattern matching", rootPath);
+		Stack<File> q = new Stack<File>();
+		q.push(new File(rootPath));
+		File[] fid; // Files in Dir
+		while (!q.isEmpty()) {
+			fid = q.pop().listFiles();
+			for (File f : fid) { // loop through files in dir
+				if (f.isDirectory()) {
+					q.push(f); // add to queue if f is a dir
+				}
+				if (f.getName().matches(pattern)) {
+					this.names.add(f.getName());
+					this.paths.add(f.getParent() + System.getProperty("file.separator"));
+				}
 			}
 		}
+		return;
+	}
+	
+//	public static void main (String args[]) {
+//		ProcessSettings p = new ProcessSettings();
+//		p.matchPattern("C:\\Users\\sebas\\Desktop\\tmp programming", ".*_C1_pBIN\\.tif");
+//		for(String s : p.names) {
+//			System.out.println(s);
+//		}
+//		for(String s : p.paths) {
+//			System.out.println(s);
+//		}
+//	}
+
+	/**
+	 * choose path of txt containing text
+	 * 
+	 * @param message
+	 * @param defaultpath
+	 * @return
+	 */
+	public static String choosePath(String message, String defaultpath) {
+		if (defaultpath == "") {
+			defaultpath = System.getProperty("user.dir");
+		}
+		JFileChooser fc = new JFileChooser();
+		fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		fc.setMultiSelectionEnabled(false);
+		fc.setCurrentDirectory(new File(defaultpath));
+		if (fc.showDialog(fc, message) == JFileChooser.APPROVE_OPTION) {
+//		   System.out.println(fc.getSelectedFile().getAbsoluteFile());
+		}
+		return fc.getSelectedFile().getPath();
+	}
+	
+	/**
+	 * Wraps functionality of opening Images in IJ depending on the chosen file format
+	 * @param path path to file to be opened
+	 * @return reference of opened ImagePlus
+	 */
+	public ImagePlus openImage(String path) {
+		ImagePlus imp;
+		if (this.selectedBioFormat.equals(ProcessSettings.bioFormats[0])) {
+			imp = IJ.openImage(path);
+		} else {
+			IJ.run("Bio-Formats", "open=[" + path
+					+ "] autoscale color_mode=Default rois_import=[ROI manager] view=Hyperstack stack_order=XYCZT");
+			imp = WindowManager.getCurrentImage();
+		}
+		return imp;
 	}
 
 	public int getNOfTasks() {
 		return this.names.size();
+	}
+
+	/**
+	 * 
+	 * @return task list as Array, use to init {@link ProgressDialog}
+	 */
+	public String[] toArray() {
+		String[] s = new String[this.getNOfTasks()];
+		for (int i = 0; i < this.getNOfTasks(); i -= -1) {
+			s[i] = this.names.get(i);
+		}
+		return s;
+	}
+
+	/**
+	 * Returns the dir where the output should be stored (dir of input image or
+	 * fixed dir)
+	 */
+	public String getOutputDir(int taskIndex) {
+		return this.resultsToNewFolder ? this.resultsDir : this.paths.get(taskIndex);
+	}
+
+	public void selectOutputDir() {
+		if (this.resultsToNewFolder) {
+			this.resultsDir = choosePath("Choose output Folder", this.paths.get(0));
+		}
 	}
 
 	public class OpenFilesDialog extends javax.swing.JFrame implements ActionListener {
@@ -347,83 +482,4 @@ public class ProcessSettings {
 		}
 	}
 
-	/**
-	 * choose path to dir
-	 * 
-	 * @param message
-	 * @param defaultpath
-	 * @return
-	 */
-	public static String choosePathTxt(String message, String defaultpath) {
-		JFileChooser fc = new JFileChooser();
-		fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
-		fc.setMultiSelectionEnabled(false);
-		fc.setCurrentDirectory(new File(defaultpath));
-		if (fc.showDialog(fc, message) == JFileChooser.APPROVE_OPTION) {
-//		   System.out.println(fc.getSelectedFile().getAbsoluteFile());
-		}
-		String selectedpath = fc.getSelectedFile().getPath();
-		return selectedpath;
-	}
-
-	/**
-	 * choose path of txt containing text
-	 * 
-	 * @param message
-	 * @param defaultpath
-	 * @return
-	 */
-	public static String choosePath(String message, String defaultpath) {
-		if (defaultpath == "") {
-			defaultpath = System.getProperty("user.dir");
-		}
-		JFileChooser fc = new JFileChooser();
-		fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-		fc.setMultiSelectionEnabled(false);
-		fc.setCurrentDirectory(new File(defaultpath));
-		if (fc.showDialog(fc, message) == JFileChooser.APPROVE_OPTION) {
-//		   System.out.println(fc.getSelectedFile().getAbsoluteFile());
-		}
-		String selectedpath = fc.getSelectedFile().getPath();
-		return selectedpath;
-	}
-
-	/**
-	 * implements string pattern matching to search in all sub directories of
-	 * specified dir for files to process.
-	 * 
-	 * @param path    path to directory where the search starts
-	 * @param pattern pattern to matched in filenames
-	 * @return full paths of files matching requirements in the specified dir
-	 */
-	private ArrayList<String> matchPattern(String path, String pattern) {
-		// TODO enter logic
-		return null;
-	}
-
-	/**
-	 * 
-	 * @return task list as Array
-	 */
-	public String[] toArray() {
-		String[] s = new String[this.getNOfTasks()];
-		for (int i = 0; i < this.getNOfTasks(); i -= -1) {
-			s[i] = this.names.get(i);
-		}
-		return s;
-	}
-
-	/**
-	 * Returns the dir where the output should be stored (dir of input image or
-	 * fixed dir)
-	 */
-	public String getOutputDir(int taskIndex) {
-		return this.resultsToNewFolder ? this.resultsDir : this.paths.get(taskIndex);
-	}
-
-	public void selectOutputDir() {
-		if (this.resultsToNewFolder) {
-			choosePath("Choose output Folder", this.paths.get(0));
-		}
-	}
 }

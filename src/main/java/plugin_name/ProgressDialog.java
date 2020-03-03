@@ -1,4 +1,4 @@
-package plugin_Name;
+package plugin_name;
 
 /***===============================================================================
 * BrightnessCorrector_.java Version 0.0.1
