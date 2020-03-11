@@ -54,8 +54,10 @@ public class ProcessSettings {
 	static final String[] bioFormats = { ".tif", "raw microscopy file (e.g. OIB-file)" };
 	String selectedBioFormat = bioFormats[0];
 
-	String pattern = ".*_C1_pBIN\\.tif"; // example regex choosing a file ending with "_C1_pBIN.tif"
-
+	String posFilePattern = "_C1.tif"; // pattern to be matched in Filename
+	String negFilePattern = ".nd2"; // pattern to exclude filenames even if pos Pattern was matched
+	String negDirPattern = "Clone 123";	// pattern to exclude files by parent dir
+	
 //	boolean saveDateToFilenames = false;
 //	boolean saveParam = true;
 //	String ChosenNumberFormat = "Germany (0,00...)";	
@@ -66,8 +68,8 @@ public class ProcessSettings {
 
 	// --------------------- Task data
 
-	ArrayList<String> names = new ArrayList<String>();		// files names with ending (e.g. .tif)
-	ArrayList<String> paths = new ArrayList<String>();		// paths to parent dir with last file sep ("/")
+	ArrayList<String> names = new ArrayList<String>(); // files names with ending (e.g. .tif)
+	ArrayList<String> paths = new ArrayList<String>(); // paths to parent dir with last file sep ("/")
 
 	private ProcessSettings() {
 		super();
@@ -109,7 +111,6 @@ public class ProcessSettings {
 		gd.setInsets(0, 0, 0);
 		gd.addChoice("Input File format ", bioFormats, inst.selectedBioFormat);
 		gd.setInsets(0, 0, 0);
-		gd.addStringField("Enter pattern for pattern Matching", inst.pattern, 16);
 		gd.addCheckbox("Output to new Folder", inst.resultsToNewFolder);
 
 		// show Dialog-----------------------------------------------------------------
@@ -119,10 +120,10 @@ public class ProcessSettings {
 
 		inst.selectedTaskVariant = gd.getNextChoice();
 		inst.selectedBioFormat = gd.getNextChoice();
-		inst.pattern = gd.getNextString();
 		inst.resultsToNewFolder = gd.getNextBoolean();
 
-		if(gd.wasCanceled()) throw new Exception("GD canceled by user");
+		if (gd.wasCanceled())
+			throw new Exception("GD canceled by user");
 
 		inst.fileFinder();
 
@@ -173,7 +174,7 @@ public class ProcessSettings {
 			od.setLocation(0, 0);
 			od.setVisible(true);
 
-			od.addWindowListener(new java.awt.event.WindowAdapter(){
+			od.addWindowListener(new java.awt.event.WindowAdapter() {
 				public void windowClosing(WindowEvent winEvt) {
 					return;
 				}
@@ -193,7 +194,7 @@ public class ProcessSettings {
 		} else if (this.selectedTaskVariant == taskVariant[3]) {
 			readFilesFromTxt(System.getProperty("user.dir"));
 		} else if (this.selectedTaskVariant == taskVariant[4]) {
-			matchPattern(System.getProperty("user.dir"), pattern);
+			matchPattern(System.getProperty("user.dir"));
 		}
 	}
 
@@ -251,19 +252,31 @@ public class ProcessSettings {
 	 * @param path    path to directory where the search starts
 	 * @param pattern regex to be matched in filenames
 	 * @return full paths of files matching requirements in the specified dir
+	 * @throws Exception
 	 */
-	private void matchPattern (String rootPath, String pattern) {
-		rootPath = choosePath("Choose directory to start pattern matching", rootPath);
+	private void matchPattern(String rootPath) throws IOException {
+		JFileChooser fc = new JFileChooser();
+		fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		fc.setMultiSelectionEnabled(true);
+		fc.setCurrentDirectory(new File(rootPath));
+		fc.showDialog(fc, "Choose directory to start pattern matching");
+
 		Stack<File> q = new Stack<File>();
-		q.push(new File(rootPath));
+		for(File f : fc.getSelectedFiles()) {
+			q.push(f);
+		}
+		
+		patternMatchingGD();		// request User input as params for pattern matching
+	
 		File[] fid; // Files in Dir
 		while (!q.isEmpty()) {
 			fid = q.pop().listFiles();
 			for (File f : fid) { // loop through files in dir
-				if (f.isDirectory()) {
-					q.push(f); // add to queue if f is a dir
+				if (f.isDirectory() && !f.getName().matches(this.negDirPattern)) {
+					q.push(f); // add to queue if f is a dir and negDirPattern can't be matched
 				}
-				if (f.getName().matches(pattern)) {
+				else if (f.getName().matches(this.posFilePattern) && !f.getName().matches(this.negFilePattern)) { 
+					// add to file list if posPattern matches and negative Pattern doesn't
 					this.names.add(f.getName());
 					this.paths.add(f.getParent() + System.getProperty("file.separator"));
 				}
@@ -272,40 +285,73 @@ public class ProcessSettings {
 		return;
 	}
 	
-//	public static void main (String args[]) {
-//		ProcessSettings p = new ProcessSettings();
-//		p.matchPattern("C:\\Users\\sebas\\Desktop\\tmp programming", ".*_C1_pBIN\\.tif");
-//		for(String s : p.names) {
-//			System.out.println(s);
-//		}
-//		for(String s : p.paths) {
-//			System.out.println(s);
-//		}
-//	}
-
 	/**
-	 * choose path of txt containing text
-	 * 
-	 * @param message
-	 * @param defaultpath
-	 * @return
+	 * GD requesting user input for Pattern matching and formatting input data
+	 * @throws IOException
 	 */
-	public static String choosePath(String message, String defaultpath) {
-		if (defaultpath == "") {
-			defaultpath = System.getProperty("user.dir");
+	private void patternMatchingGD() throws IOException {
+		boolean posFileInputAsRegex = false, negFileInputAsRegex = false, negDirInputAsRegex = false;
+		GenericDialog gd = new GenericDialog("Insert pattern matching parameters:");
+		
+		gd.addCheckbox("Input as Regex", posFileInputAsRegex);
+		gd.setInsets(0, 50, 0);
+		gd.addStringField("Enter pattern to be matched in filenames", this.posFilePattern, 16);
+		
+		gd.addCheckbox("Input as Regex", negFileInputAsRegex);
+		gd.setInsets(0, 50, 0);
+		gd.addStringField("Enter pattern in filenames to exclude files", this.negFilePattern, 16);
+		
+		gd.addCheckbox("Input as Regex", negDirInputAsRegex);
+		gd.setInsets(0, 50, 0);
+		gd.addStringField("Enter pattern in parent directories to exclude files", this.negDirPattern, 16);
+		
+		gd.showDialog();
+
+		posFileInputAsRegex = gd.getNextBoolean();
+		this.posFilePattern = gd.getNextString();
+		negFileInputAsRegex = gd.getNextBoolean();
+		this.negFilePattern = gd.getNextString();
+		negDirInputAsRegex = gd.getNextBoolean();
+		this.negDirPattern = gd.getNextString();
+		if (gd.wasCanceled()) {
+		throw new IOException("Pattern matching failed");
+	}
+
+		if (!posFileInputAsRegex) {
+			this.posFilePattern = transformStringToRegex(this.posFilePattern);
+		}	
+		if (!negFileInputAsRegex && this.negFilePattern != "") {
+			this.negFilePattern = transformStringToRegex(this.negFilePattern);
 		}
-		JFileChooser fc = new JFileChooser();
-		fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-		fc.setMultiSelectionEnabled(false);
-		fc.setCurrentDirectory(new File(defaultpath));
-		if (fc.showDialog(fc, message) == JFileChooser.APPROVE_OPTION) {
-//		   System.out.println(fc.getSelectedFile().getAbsoluteFile());
+		if (!negDirInputAsRegex && this.negDirPattern != "") {
+			this.negDirPattern = transformStringToRegex(this.negDirPattern);
 		}
-		return fc.getSelectedFile().getPath();
+
 	}
 	
 	/**
-	 * Wraps functionality of opening Images in IJ depending on the chosen file format
+	 * @param pattern Simple String pattern to be matched
+	 * @return Regex allowing all characters before and after the input Pattern
+	 */
+	static String transformStringToRegex(String pattern) {
+		return ".*" + pattern.replace(".", "\\.") + ".*";
+	}
+
+//	public static void main (String args[]) throws IOException {
+//		ProcessSettings p = new ProcessSettings();
+//		p.posFilePattern = ".tif"; // pattern to be matched in Filename
+//		p.negFilePattern = "001"; // pattern to exclude filenames even if pos Pattern was matched
+//		p.negDirPattern = "";	// pattern to exclude files by parent dir
+//		p.matchPattern("C:\\Users\\sebas\\Desktop\\tmp programming");
+//		for(int i = 0; i < p.names.size(); i++) {
+//			System.out.println(p.paths.get(i)+p.names.get(i) );
+//		}		
+//	}
+
+	/**
+	 * Wraps functionality of opening Images in IJ depending on the chosen file
+	 * format
+	 * 
 	 * @param path path to file to be opened
 	 * @return reference of opened ImagePlus
 	 */
@@ -347,7 +393,16 @@ public class ProcessSettings {
 
 	public void selectOutputDir() {
 		if (this.resultsToNewFolder) {
-			this.resultsDir = choosePath("Choose output Folder", this.paths.get(0));
+			String path = this.paths.get(0);
+			if (path == "") {
+				path = System.getProperty("user.dir");
+			}
+			JFileChooser fc = new JFileChooser();
+			fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+			fc.setMultiSelectionEnabled(false);
+			fc.setCurrentDirectory(new File(path));
+			fc.showDialog(fc, "Select Directory for Output");
+			this.resultsDir = fc.getSelectedFile().getPath();
 		}
 	}
 

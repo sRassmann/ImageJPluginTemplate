@@ -19,6 +19,8 @@ update the project name and metadata (Note: ImageJ requires a underscore in the 
 	-plugin.config
 	
 	-Run configuration
+	
+	-plugin Name (and version) in the Main
 
 test the project and see if the template compiles and runs with changed settings
 

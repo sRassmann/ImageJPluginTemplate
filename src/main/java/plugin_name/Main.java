@@ -1,4 +1,4 @@
-package plugin_name;
+package plugin_name; // TODO change package Name
 
 import java.awt.event.WindowEvent;
 
@@ -8,9 +8,8 @@ import ij.plugin.PlugIn;
 
 public class Main implements PlugIn {
 
-	static String pluginName = "plugin Name";
-	static String pluginVersion = "v0.0.1";
-
+	static String pluginName = "plugin Name"; // TODO change Name
+	static String pluginVersion = "0.0.2";
 	ProgressDialog progressDialog;
 	boolean processingDone = false;
 	boolean continueProcessing = true;
