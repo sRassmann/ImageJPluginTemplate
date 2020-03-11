@@ -56,8 +56,8 @@ public class ProcessSettings {
 
 	String posFilePattern = "_C1.tif"; // pattern to be matched in Filename
 	String negFilePattern = ".nd2"; // pattern to exclude filenames even if pos Pattern was matched
-	String negDirPattern = "Clone 123";	// pattern to exclude files by parent dir
-	
+	String negDirPattern = "Clone 123"; // pattern to exclude files by parent dir
+
 //	boolean saveDateToFilenames = false;
 //	boolean saveParam = true;
 //	String ChosenNumberFormat = "Germany (0,00...)";	
@@ -262,20 +262,19 @@ public class ProcessSettings {
 		fc.showDialog(fc, "Choose directory to start pattern matching");
 
 		Stack<File> q = new Stack<File>();
-		for(File f : fc.getSelectedFiles()) {
+		for (File f : fc.getSelectedFiles()) {
 			q.push(f);
 		}
-		
-		patternMatchingGD();		// request User input as params for pattern matching
-	
+
+		patternMatchingGD(); // request User input as params for pattern matching
+
 		File[] fid; // Files in Dir
 		while (!q.isEmpty()) {
 			fid = q.pop().listFiles();
 			for (File f : fid) { // loop through files in dir
 				if (f.isDirectory() && !f.getName().matches(this.negDirPattern)) {
 					q.push(f); // add to queue if f is a dir and negDirPattern can't be matched
-				}
-				else if (f.getName().matches(this.posFilePattern) && !f.getName().matches(this.negFilePattern)) { 
+				} else if (f.getName().matches(this.posFilePattern) && !f.getName().matches(this.negFilePattern)) {
 					// add to file list if posPattern matches and negative Pattern doesn't
 					this.names.add(f.getName());
 					this.paths.add(f.getParent() + System.getProperty("file.separator"));
@@ -284,27 +283,28 @@ public class ProcessSettings {
 		}
 		return;
 	}
-	
+
 	/**
 	 * GD requesting user input for Pattern matching and formatting input data
+	 * 
 	 * @throws IOException
 	 */
 	private void patternMatchingGD() throws IOException {
 		boolean posFileInputAsRegex = false, negFileInputAsRegex = false, negDirInputAsRegex = false;
 		GenericDialog gd = new GenericDialog("Insert pattern matching parameters:");
-		
+
 		gd.addCheckbox("Input as Regex", posFileInputAsRegex);
 		gd.setInsets(0, 50, 0);
 		gd.addStringField("Enter pattern to be matched in filenames", this.posFilePattern, 16);
-		
+
 		gd.addCheckbox("Input as Regex", negFileInputAsRegex);
 		gd.setInsets(0, 50, 0);
 		gd.addStringField("Enter pattern in filenames to exclude files", this.negFilePattern, 16);
-		
+
 		gd.addCheckbox("Input as Regex", negDirInputAsRegex);
 		gd.setInsets(0, 50, 0);
 		gd.addStringField("Enter pattern in parent directories to exclude files", this.negDirPattern, 16);
-		
+
 		gd.showDialog();
 
 		posFileInputAsRegex = gd.getNextBoolean();
@@ -314,27 +314,31 @@ public class ProcessSettings {
 		negDirInputAsRegex = gd.getNextBoolean();
 		this.negDirPattern = gd.getNextString();
 		if (gd.wasCanceled()) {
-		throw new IOException("Pattern matching failed");
-	}
+			throw new IOException("Pattern matching failed");
+		}
 
 		if (!posFileInputAsRegex) {
 			this.posFilePattern = transformStringToRegex(this.posFilePattern);
-		}	
-		if (!negFileInputAsRegex && this.negFilePattern != "") {
+		}
+		if (!negFileInputAsRegex) {
 			this.negFilePattern = transformStringToRegex(this.negFilePattern);
 		}
-		if (!negDirInputAsRegex && this.negDirPattern != "") {
+		if (!negDirInputAsRegex) {
 			this.negDirPattern = transformStringToRegex(this.negDirPattern);
 		}
 
 	}
-	
+
 	/**
-	 * @param pattern Simple String pattern to be matched
+	 * @param pattern Simple String pattern to be matched, if the string is empty
+	 *                (""), an empty String is returned
 	 * @return Regex allowing all characters before and after the input Pattern
 	 */
 	static String transformStringToRegex(String pattern) {
-		return ".*" + pattern.replace(".", "\\.") + ".*";
+		String s = "";
+		if (pattern.length() != 0)
+			s = ".*" + pattern.replace(".", "\\.") + ".*";
+		return s;
 	}
 
 //	public static void main (String args[]) throws IOException {
