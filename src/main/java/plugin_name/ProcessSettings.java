@@ -406,7 +406,7 @@ public class ProcessSettings {
 			fc.setMultiSelectionEnabled(false);
 			fc.setCurrentDirectory(new File(path));
 			fc.showDialog(fc, "Select Directory for Output");
-			this.resultsDir = fc.getSelectedFile().getPath();
+			this.resultsDir = fc.getSelectedFile().getPath() + System.getProperty("file.separator");
 		}
 	}
 
